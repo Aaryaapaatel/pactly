@@ -3,13 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { CustomRule, Policy } from "@/types";
+import type { ApprovedOffering, CustomRule, Policy } from "@/types";
 
 export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
   const router = useRouter();
   const [maxDiscount, setMaxDiscount] = useState(initialPolicy.max_discount_percent);
   const [deliveryWeeks, setDeliveryWeeks] = useState(initialPolicy.standard_delivery_weeks);
   const [customRules, setCustomRules] = useState<CustomRule[]>(initialPolicy.custom_rules);
+  const [approvedOfferings, setApprovedOfferings] = useState<ApprovedOffering[]>(
+    initialPolicy.approved_offerings
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +31,20 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
     setCustomRules((prev) => [...prev, { label: "", description: "" }]);
   }
 
+  function updateOffering(index: number, field: keyof ApprovedOffering, value: string) {
+    setApprovedOfferings((prev) =>
+      prev.map((offering, i) => (i === index ? { ...offering, [field]: value } : offering))
+    );
+  }
+
+  function removeOffering(index: number) {
+    setApprovedOfferings((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addOffering() {
+    setApprovedOfferings((prev) => [...prev, { name: "", description: "" }]);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -42,6 +59,9 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
           max_discount_percent: maxDiscount,
           standard_delivery_weeks: deliveryWeeks,
           custom_rules: customRules.filter((r) => r.label.trim() && r.description.trim()),
+          approved_offerings: approvedOfferings.filter(
+            (o) => o.name.trim() && o.description.trim()
+          ),
         }),
       });
       const data = await res.json();
@@ -97,6 +117,62 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
             onChange={(e) => setDeliveryWeeks(Number(e.target.value))}
             className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">
+                Approved offerings
+              </label>
+              <p className="mt-0.5 text-xs text-slate-400">
+                What the company actually sells or supports. Any promise for something not on
+                this list gets flagged, even if it doesn&apos;t break a numeric rule.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addOffering}
+              className="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              + Add offering
+            </button>
+          </div>
+          {approvedOfferings.length === 0 && (
+            <p className="text-sm text-slate-400">
+              No offerings list yet. Without one, only the discount, delivery, and custom rules
+              below are checked.
+            </p>
+          )}
+          <div className="space-y-3">
+            {approvedOfferings.map((offering, i) => (
+              <div key={i} className="flex gap-2 rounded-md border border-slate-200 p-3">
+                <div className="flex-1 space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Offering name, e.g. Pro plan"
+                    value={offering.name}
+                    onChange={(e) => updateOffering(i, "name", e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description, e.g. $99/month, includes email support, no SSO"
+                    value={offering.description}
+                    onChange={(e) => updateOffering(i, "description", e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeOffering(i)}
+                  className="self-start text-sm text-red-500 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-5">

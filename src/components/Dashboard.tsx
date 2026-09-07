@@ -115,6 +115,12 @@ export function Dashboard({
             <span>{initialPolicy.custom_rules.length} custom rule(s)</span>
           </>
         )}
+        {initialPolicy.approved_offerings.length > 0 && (
+          <>
+            <span className="text-slate-300">|</span>
+            <span>{initialPolicy.approved_offerings.length} approved offering(s)</span>
+          </>
+        )}
       </div>
 
       <form onSubmit={handleAnalyze} className="mb-10">

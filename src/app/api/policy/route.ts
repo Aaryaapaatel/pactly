@@ -14,6 +14,9 @@ const updatePolicySchema = z.object({
   custom_rules: z
     .array(z.object({ label: z.string().min(1), description: z.string().min(1) }))
     .default([]),
+  approved_offerings: z
+    .array(z.object({ name: z.string().min(1), description: z.string().min(1) }))
+    .default([]),
 });
 
 export async function PUT(request: Request) {

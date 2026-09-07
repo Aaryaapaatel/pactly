@@ -11,8 +11,31 @@ const extractedPromiseSchema = z.object({
   risk_reason: z.string().nullable(),
 });
 
+// Claude occasionally serializes the promises array as a JSON string instead
+// of returning it as native tool_use input - sometimes as a stringified
+// array, sometimes as a stringified copy of the whole {promises: [...]}
+// wrapper nested inside the promises field itself. Normalize all of these
+// to a plain array before validating.
 const extractionResultSchema = z.object({
-  promises: z.array(extractedPromiseSchema),
+  promises: z.preprocess((value) => {
+    let normalized = value;
+    if (typeof normalized === "string") {
+      try {
+        normalized = JSON.parse(normalized);
+      } catch {
+        return value;
+      }
+    }
+    if (
+      normalized &&
+      typeof normalized === "object" &&
+      !Array.isArray(normalized) &&
+      "promises" in normalized
+    ) {
+      normalized = (normalized as { promises: unknown }).promises;
+    }
+    return normalized;
+  }, z.array(extractedPromiseSchema)),
 });
 
 export type ExtractedPromise = z.infer<typeof extractedPromiseSchema>;
@@ -49,12 +72,12 @@ const RECORD_PROMISES_TOOL = {
             risk_flag: {
               type: "boolean",
               description:
-                "true if this promise appears to conflict with the company policies provided in the prompt.",
+                "true if this promise conflicts with the company policies provided in the prompt, INCLUDING if it promises a product, feature, plan, or guarantee that is not on the approved offerings list (when one is provided).",
             },
             risk_reason: {
               type: ["string", "null"],
               description:
-                "If risk_flag is true, a short (one sentence) explanation of which policy it conflicts with and why. Null if risk_flag is false.",
+                "If risk_flag is true, a short (one sentence) explanation of which policy or missing approved-offerings match caused the flag. Null if risk_flag is false.",
             },
           },
           required: ["promise_text", "category", "extracted_value", "risk_flag", "risk_reason"],
@@ -73,6 +96,20 @@ function formatPolicyForPrompt(policy: Policy): string {
   for (const rule of policy.custom_rules) {
     lines.push(`- ${rule.label}: ${rule.description}`);
   }
+
+  if (policy.approved_offerings.length > 0) {
+    lines.push("");
+    lines.push(
+      "Approved company offerings (the ONLY products, plans, features, and guarantees the company actually provides):"
+    );
+    for (const offering of policy.approved_offerings) {
+      lines.push(`- ${offering.name}: ${offering.description}`);
+    }
+    lines.push(
+      "If the agent promises a feature, plan, product, or guarantee that is not on this list (or is a stronger version of something on this list, e.g. promising it for free when the list says it's paid), treat that as a policy risk even though no numeric rule is broken."
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -84,7 +121,7 @@ export async function extractPromises(
     model: EXTRACTION_MODEL,
     max_tokens: 4096,
     system:
-      "You are a compliance auditor for an AI sales agent accountability platform. You read sales conversations between an AI sales agent and a customer, and extract every promise, commitment, price quote, delivery timeline, discount, and feature guarantee that the AGENT made. You never invent promises that were not actually made, and you never attribute the customer's statements to the agent. You always respond by calling the record_promises tool.",
+      "You are a compliance auditor for an AI sales agent accountability platform. You read sales conversations between an AI sales agent and a customer, and extract every promise, commitment, price quote, delivery timeline, discount, and feature guarantee that the AGENT made. You never invent promises that were not actually made, and you never attribute the customer's statements to the agent. When an approved offerings list is provided, you treat it as the exhaustive source of truth for what the company sells or supports: any agent promise that isn't covered by that list (a feature, plan, product, or guarantee the company doesn't actually offer, or a stronger version of one it does) is a policy risk, even if no numeric rule is violated. You always respond by calling the record_promises tool.",
     tools: [RECORD_PROMISES_TOOL],
     tool_choice: { type: "tool", name: "record_promises" },
     messages: [

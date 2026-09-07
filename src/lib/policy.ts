@@ -25,6 +25,7 @@ export async function getActivePolicy(): Promise<Policy> {
       max_discount_percent: DEFAULT_MAX_DISCOUNT_PERCENT,
       standard_delivery_weeks: DEFAULT_STANDARD_DELIVERY_WEEKS,
       custom_rules: [],
+      approved_offerings: [],
     })
     .select("*")
     .single();

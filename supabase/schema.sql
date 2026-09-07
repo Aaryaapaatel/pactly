@@ -10,11 +10,12 @@ create table if not exists policies (
   max_discount_percent numeric not null default 10,
   standard_delivery_weeks numeric not null default 4,
   custom_rules jsonb not null default '[]'::jsonb,
+  approved_offerings jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-comment on table policies is 'Company policy rules used to flag risky promises. custom_rules is an array of {label, description}.';
+comment on table policies is 'Company policy rules used to flag risky promises. custom_rules is an array of {label, description}. approved_offerings is an array of {name, description} describing what the company actually offers, used to flag promises for products/features/plans that are not on the list.';
 
 -- One row per pasted conversation.
 create table if not exists conversations (

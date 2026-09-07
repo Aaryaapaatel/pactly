@@ -5,11 +5,17 @@ export interface CustomRule {
   description: string;
 }
 
+export interface ApprovedOffering {
+  name: string;
+  description: string;
+}
+
 export interface Policy {
   id: string;
   max_discount_percent: number;
   standard_delivery_weeks: number;
   custom_rules: CustomRule[];
+  approved_offerings: ApprovedOffering[];
   created_at: string;
   updated_at: string;
 }

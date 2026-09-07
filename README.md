@@ -13,12 +13,15 @@ and discount the agent made — then flags anything that conflicts with your com
 ## How it works
 
 1. You paste a conversation transcript into the dashboard.
-2. `POST /api/analyze` sends the transcript and your current company policy to Claude,
-   which returns a structured list of promises (category, exact wording, value, and
-   whether it looks like a policy risk) via a forced tool call.
+2. `POST /api/analyze` sends the transcript and your current company policy — max
+   discount, delivery window, custom rules, and your approved offerings list — to
+   Claude, which returns a structured list of promises (category, exact wording,
+   value, and whether it looks like a policy risk) via a forced tool call.
 3. Numeric claims (discount %, delivery time) are also re-checked deterministically in
    code (`src/lib/extraction.ts`) against your policy, so risk flags for those two
-   categories don't depend solely on the model's arithmetic.
+   categories don't depend solely on the model's arithmetic. Promises for products,
+   features, or plans that aren't on your approved offerings list are flagged by the
+   model even when no numeric rule is broken.
 4. The conversation and its extracted promises are saved to Supabase and rendered in the
    audit log.
 
@@ -38,7 +41,7 @@ src/
     AuditLog.tsx            Renders extracted promises
     CategoryBadge.tsx        pricing / discount / timeline / feature / other
     RiskBadge.tsx            compliant / policy risk
-    PolicyForm.tsx           Edit max discount, delivery window, custom rules
+    PolicyForm.tsx           Edit max discount, delivery window, custom rules, offerings list
   lib/
     anthropic.ts             Claude client
     extraction.ts            Prompting, tool schema, zod validation, policy overlay
@@ -54,7 +57,10 @@ supabase/schema.sql             Database schema (run this in Supabase)
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql) to create the
-   `policies`, `conversations`, and `promises` tables.
+   `policies`, `conversations`, and `promises` tables. If you set up the project before
+   the approved offerings feature was added, instead run
+   [`supabase/migrations/001_approved_offerings.sql`](supabase/migrations/001_approved_offerings.sql)
+   to add the new column.
 3. From **Project Settings → API**, copy the **Project URL** and the **service_role**
    secret key (not the anon key — the app writes to the database from server-side API
    routes only).
@@ -80,8 +86,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Paste a conversation and click
 **Analyze conversation**. Visit **Company policy** to adjust the max discount, standard
-delivery window, or add custom rules (e.g. "no free support beyond 30 days") — new rules
-apply to conversations analyzed after the change.
+delivery window, add custom rules (e.g. "no free support beyond 30 days"), or list your
+**approved offerings** (products, plans, features, and guarantees the company actually
+provides) — any promise for something not on that list gets flagged even if it doesn't
+break a numeric rule. Changes apply to conversations analyzed after the change.
 
 ## Notes / next steps
 
