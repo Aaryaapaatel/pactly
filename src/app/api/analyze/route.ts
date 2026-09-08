@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActivePolicy } from "@/lib/policy";
 import { extractPromises } from "@/lib/extraction";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { checkUsageAllowed } from "@/lib/subscription";
 import type { ConversationWithPromises } from "@/types";
 
 const RATE_LIMIT = 20;
@@ -34,6 +35,17 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: `Rate limit exceeded. Max ${RATE_LIMIT} analyses per hour.` },
       { status: 429 }
+    );
+  }
+
+  const usage = await checkUsageAllowed(supabase, user.id);
+  if (!usage.allowed) {
+    return NextResponse.json(
+      {
+        error: `You've used all ${usage.limit} free conversations this month. Upgrade to Pro for unlimited.`,
+        upgrade_url: "/pricing",
+      },
+      { status: 402 }
     );
   }
 

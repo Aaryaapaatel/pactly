@@ -29,17 +29,25 @@ export function Dashboard({
   initialPolicy,
   initialConversations,
   userEmail,
+  plan,
+  conversationsUsed,
+  conversationsLimit,
 }: {
   initialPolicy: Policy;
   initialConversations: ConversationSummary[];
   userEmail: string;
+  plan: "free" | "pro";
+  conversationsUsed: number;
+  conversationsLimit: number | null;
 }) {
   const router = useRouter();
   const [conversationText, setConversationText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeUrl, setUpgradeUrl] = useState<string | null>(null);
   const [result, setResult] = useState<ConversationWithPromises | null>(null);
   const [history, setHistory] = useState(initialConversations);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const [search, setSearch] = useState("");
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -63,12 +71,26 @@ export function Dashboard({
     router.refresh();
   }
 
+  async function handleManageBilling() {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to open billing portal.");
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open billing portal.");
+      setPortalLoading(false);
+    }
+  }
+
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault();
     if (!conversationText.trim()) return;
 
     setLoading(true);
     setError(null);
+    setUpgradeUrl(null);
     setResult(null);
 
     try {
@@ -80,6 +102,7 @@ export function Dashboard({
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 402 && data.upgrade_url) setUpgradeUrl(data.upgrade_url);
         throw new Error(data.error ?? "Something went wrong.");
       }
 
@@ -154,6 +177,22 @@ export function Dashboard({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-500">{userEmail}</span>
+          {plan === "pro" ? (
+            <button
+              onClick={handleManageBilling}
+              disabled={portalLoading}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              {portalLoading ? "Loading..." : "Manage billing (Pro)"}
+            </button>
+          ) : (
+            <Link
+              href="/pricing"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Upgrade to Pro
+            </Link>
+          )}
           <Link
             href="/policy"
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
@@ -196,6 +235,19 @@ export function Dashboard({
             <span>{initialPolicy.approved_offerings.length} approved offering(s)</span>
           </>
         )}
+        <span className="text-slate-300">|</span>
+        <span>
+          {plan === "pro" ? (
+            <strong className="text-slate-900">Unlimited conversations (Pro)</strong>
+          ) : (
+            <>
+              <strong className="text-slate-900">
+                {conversationsUsed}/{conversationsLimit}
+              </strong>{" "}
+              conversations used this month
+            </>
+          )}
+        </span>
       </div>
 
       <form onSubmit={handleAnalyze} className="mb-10">
@@ -220,7 +272,19 @@ export function Dashboard({
           >
             {loading ? "Analyzing..." : "Analyze conversation"}
           </button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
+          {error && (
+            <span className="text-sm text-red-600">
+              {error}
+              {upgradeUrl && (
+                <>
+                  {" "}
+                  <Link href={upgradeUrl} className="font-semibold underline">
+                    Upgrade to Pro
+                  </Link>
+                </>
+              )}
+            </span>
+          )}
         </div>
       </form>
 

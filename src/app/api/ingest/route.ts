@@ -5,6 +5,7 @@ import { hashApiKey } from "@/lib/apiKeys";
 import { getActivePolicy } from "@/lib/policy";
 import { extractPromises } from "@/lib/extraction";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { checkUsageAllowed } from "@/lib/subscription";
 import type { ConversationWithPromises } from "@/types";
 
 const RATE_LIMIT = 60;
@@ -68,6 +69,17 @@ export async function POST(request: Request) {
     .from("api_keys")
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", keyRow.id);
+
+  const usage = await checkUsageAllowed(supabaseAdmin, userId);
+  if (!usage.allowed) {
+    return NextResponse.json(
+      {
+        error: `This account has used all ${usage.limit} free conversations this month. Upgrade to Pro for unlimited.`,
+        upgrade_url: "/pricing",
+      },
+      { status: 402 }
+    );
+  }
 
   const body = await request.json().catch(() => null);
   const parsed = ingestSchema.safeParse(body);

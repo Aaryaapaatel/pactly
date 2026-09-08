@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Dashboard } from "@/components/Dashboard";
 import { getActivePolicy } from "@/lib/policy";
+import { checkUsageAllowed, getSubscription } from "@/lib/subscription";
 import { createClient } from "@/lib/supabase/server";
 import type { PromiseCategory } from "@/types";
 
@@ -14,6 +15,8 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const policy = await getActivePolicy(supabase, user.id);
+  const subscription = await getSubscription(supabase, user.id);
+  const usage = await checkUsageAllowed(supabase, user.id);
 
   const { data } = await supabase
     .from("conversations")
@@ -38,6 +41,9 @@ export default async function DashboardPage() {
       initialPolicy={policy}
       initialConversations={conversations}
       userEmail={user.email ?? ""}
+      plan={subscription.plan}
+      conversationsUsed={usage.used}
+      conversationsLimit={usage.limit}
     />
   );
 }

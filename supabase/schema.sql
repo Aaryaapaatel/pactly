@@ -74,6 +74,29 @@ create index if not exists rate_limit_events_lookup_idx
 
 alter table rate_limit_events enable row level security;
 
+-- Subscription/billing state. Different RLS shape from every other table on
+-- purpose: users can SELECT their own row, but there is no insert/update/
+-- delete policy for the user role - only the service-role client (Stripe
+-- webhook + checkout routes) can ever change a user's plan.
+create table if not exists subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'free' check (plan in ('free', 'pro')),
+  status text not null default 'active' check (status in ('active', 'past_due', 'canceled')),
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  current_period_end timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists subscriptions_stripe_customer_id_idx
+  on subscriptions (stripe_customer_id);
+
+alter table subscriptions enable row level security;
+
+create policy "users can view their own subscription" on subscriptions
+  for select using (auth.uid() = user_id);
+
 create index if not exists policies_user_id_idx on policies (user_id);
 create index if not exists conversations_user_id_idx on conversations (user_id);
 create index if not exists promises_user_id_idx on promises (user_id);
