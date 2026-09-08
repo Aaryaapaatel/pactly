@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuditLog } from "./AuditLog";
 import { createClient } from "@/lib/supabase/client";
-import type { ConversationWithPromises, Policy } from "@/types";
+import type { ConversationWithPromises, Policy, PromiseCategory } from "@/types";
 
 interface ConversationSummary {
   id: string;
@@ -14,7 +14,16 @@ interface ConversationSummary {
   created_at: string;
   promise_count: number;
   risk_count: number;
+  categories: PromiseCategory[];
 }
+
+const CATEGORY_OPTIONS: PromiseCategory[] = [
+  "pricing",
+  "discount",
+  "timeline",
+  "feature",
+  "other",
+];
 
 export function Dashboard({
   initialPolicy,
@@ -31,6 +40,21 @@ export function Dashboard({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConversationWithPromises | null>(null);
   const [history, setHistory] = useState(initialConversations);
+
+  const [search, setSearch] = useState("");
+  const [riskyOnly, setRiskyOnly] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<PromiseCategory | "all">("all");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const filteredHistory = useMemo(() => {
+    return history.filter((c) => {
+      if (riskyOnly && c.risk_count === 0) return false;
+      if (categoryFilter !== "all" && !c.categories.includes(categoryFilter)) return false;
+      if (search.trim() && !c.raw_text.toLowerCase().includes(search.trim().toLowerCase()))
+        return false;
+      return true;
+    });
+  }, [history, riskyOnly, categoryFilter, search]);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -69,6 +93,11 @@ export function Dashboard({
           promise_count: data.conversation.promises.length,
           risk_count: data.conversation.promises.filter((p: { risk_flag: boolean }) => p.risk_flag)
             .length,
+          categories: Array.from(
+            new Set(
+              data.conversation.promises.map((p: { category: PromiseCategory }) => p.category)
+            )
+          ) as PromiseCategory[],
         },
         ...prev,
       ]);
@@ -92,6 +121,25 @@ export function Dashboard({
       setError(err instanceof Error ? err.message : "Failed to load conversation.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Delete this conversation and its audit log entries? This can't be undone.")) {
+      return;
+    }
+    setDeletingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete conversation.");
+      setHistory((prev) => prev.filter((c) => c.id !== id));
+      if (result?.id === id) setResult(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete conversation.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -185,29 +233,81 @@ export function Dashboard({
 
       {history.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold text-slate-900">History</h2>
-          <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
-            {history.map((c) => (
-              <li key={c.id}>
-                <button
-                  onClick={() => loadConversation(c.id)}
-                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-slate-50"
-                >
-                  <span className="truncate text-slate-700">
-                    {c.raw_text.slice(0, 80)}
-                    {c.raw_text.length > 80 ? "…" : ""}
-                  </span>
-                  <span className="ml-4 flex shrink-0 items-center gap-3 text-xs text-slate-500">
-                    <span>{c.promise_count} promises</span>
-                    {c.risk_count > 0 && (
-                      <span className="font-semibold text-red-600">{c.risk_count} risks</span>
-                    )}
-                    <span>{new Date(c.created_at).toLocaleDateString("en-US")}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900">History</h2>
+            <a
+              href="/api/export"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Export CSV
+            </a>
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search conversations..."
+              className="min-w-[200px] flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as PromiseCategory | "all")}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            >
+              <option value="all">All categories</option>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1.5 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={riskyOnly}
+                onChange={(e) => setRiskyOnly(e.target.checked)}
+              />
+              Risky only
+            </label>
+          </div>
+
+          {filteredHistory.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+              No conversations match these filters.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              {filteredHistory.map((c) => (
+                <li key={c.id} className="flex items-center">
+                  <button
+                    onClick={() => loadConversation(c.id)}
+                    className="flex flex-1 items-center justify-between px-4 py-3 text-left text-sm hover:bg-slate-50"
+                  >
+                    <span className="truncate text-slate-700">
+                      {c.raw_text.slice(0, 80)}
+                      {c.raw_text.length > 80 ? "…" : ""}
+                    </span>
+                    <span className="ml-4 flex shrink-0 items-center gap-3 text-xs text-slate-500">
+                      <span>{c.promise_count} promises</span>
+                      {c.risk_count > 0 && (
+                        <span className="font-semibold text-red-600">{c.risk_count} risks</span>
+                      )}
+                      <span>{new Date(c.created_at).toLocaleDateString("en-US")}</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    disabled={deletingId === c.id}
+                    className="px-3 py-3 text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-50"
+                  >
+                    {deletingId === c.id ? "Deleting..." : "Delete"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>

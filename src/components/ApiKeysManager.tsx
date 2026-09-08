@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { ApiKey } from "@/types";
 
@@ -10,13 +10,6 @@ export function ApiKeysManager({ initialKeys }: { initialKeys: ApiKey[] }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
-  // Set client-side only to avoid a server/client hydration mismatch -
-  // window.location isn't available during server rendering.
-  const [origin, setOrigin] = useState("https://your-app.example.com");
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -76,14 +69,14 @@ export function ApiKeysManager({ initialKeys }: { initialKeys: ApiKey[] }) {
           The moment a conversation with your AI agent ends, have your backend send it here:
         </p>
         <pre className="overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">
-{`curl -X POST ${origin}/api/ingest \\
+{`curl -X POST https://<your-pactly-domain>/api/ingest \\
   -H "Authorization: Bearer pk_live_..." \\
   -H "Content-Type: application/json" \\
   -d '{"conversation_text": "Agent: ...\\nCustomer: ..."}'`}
         </pre>
         <p className="mt-2">
-          It's checked against your policy and shows up in the audit log exactly like a pasted
-          conversation would.
+          It&apos;s checked against your policy and shows up in the audit log exactly like a
+          pasted conversation would.
         </p>
       </div>
 

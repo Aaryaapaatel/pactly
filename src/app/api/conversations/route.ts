@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import type { PromiseCategory } from "@/types";
 
 export async function GET() {
   const supabase = await createClient();
@@ -10,7 +11,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("conversations")
-    .select("id, title, raw_text, created_at, promises(id, risk_flag)")
+    .select("id, title, raw_text, created_at, promises(id, risk_flag, category)")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -25,6 +26,9 @@ export async function GET() {
     created_at: c.created_at,
     promise_count: c.promises.length,
     risk_count: c.promises.filter((p: { risk_flag: boolean }) => p.risk_flag).length,
+    categories: Array.from(
+      new Set(c.promises.map((p: { category: PromiseCategory }) => p.category))
+    ),
   }));
 
   return NextResponse.json({ conversations });
