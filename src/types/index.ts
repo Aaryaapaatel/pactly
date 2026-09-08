@@ -16,6 +16,7 @@ export interface Policy {
   standard_delivery_weeks: number;
   custom_rules: CustomRule[];
   approved_offerings: ApprovedOffering[];
+  avg_order_value: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,7 +24,11 @@ export interface Policy {
 export interface Conversation {
   id: string;
   title: string | null;
-  raw_text: string;
+  // null after the 24h auto-purge cron removes it (src/app/api/cron/
+  // purge-transcripts) - the conversation and its promises are unaffected,
+  // only the original transcript text is gone.
+  raw_text: string | null;
+  transcript_purged_at: string | null;
   created_at: string;
 }
 

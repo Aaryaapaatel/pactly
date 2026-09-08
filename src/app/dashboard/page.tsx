@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Dashboard } from "@/components/Dashboard";
 import { getActivePolicy } from "@/lib/policy";
 import { checkUsageAllowed, getSubscription } from "@/lib/subscription";
+import { calculateDollarsSaved } from "@/lib/dollarsSaved";
 import { createClient } from "@/lib/supabase/server";
 import type { PromiseCategory } from "@/types";
 
@@ -17,6 +18,22 @@ export default async function DashboardPage() {
   const policy = await getActivePolicy(supabase, user.id);
   const subscription = await getSubscription(supabase, user.id);
   const usage = await checkUsageAllowed(supabase, user.id);
+  const dollarsSaved = await calculateDollarsSaved(supabase, user.id, policy);
+
+  const startOfMonth = new Date();
+  startOfMonth.setUTCDate(1);
+  startOfMonth.setUTCHours(0, 0, 0, 0);
+  const { count: promisesThisMonth } = await supabase
+    .from("promises")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("created_at", startOfMonth.toISOString());
+  const { count: violationsThisMonth } = await supabase
+    .from("promises")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("risk_flag", true)
+    .gte("created_at", startOfMonth.toISOString());
 
   const { data } = await supabase
     .from("conversations")
@@ -44,6 +61,9 @@ export default async function DashboardPage() {
       plan={subscription.plan}
       conversationsUsed={usage.used}
       conversationsLimit={usage.limit}
+      promisesThisMonth={promisesThisMonth ?? 0}
+      violationsThisMonth={violationsThisMonth ?? 0}
+      dollarsSaved={dollarsSaved}
     />
   );
 }

@@ -28,6 +28,7 @@ const updatePolicySchema = z.object({
   standard_delivery_weeks: z.number().min(0).max(520),
   custom_rules: z.array(ruleSchema).max(50).default([]),
   approved_offerings: z.array(offeringSchema).max(50).default([]),
+  avg_order_value: z.number().min(0).max(10000000).nullable().optional(),
 });
 
 export async function PUT(request: Request) {

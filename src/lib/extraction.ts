@@ -151,13 +151,15 @@ export async function extractPromises(
 }
 
 // Parses a percentage like "15%" or "up to 20 percent" out of free text.
-function parsePercent(text: string): number | null {
+// Exported for reuse in the real-time check endpoint (src/app/api/v1/check),
+// which can't afford an LLM round-trip within its latency budget.
+export function parsePercent(text: string): number | null {
   const match = text.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/i);
   return match ? parseFloat(match[1]) : null;
 }
 
 // Parses a duration and converts it to weeks. Handles day/week/month units.
-function parseWeeks(text: string): number | null {
+export function parseWeeks(text: string): number | null {
   const match = text.match(/(\d+(?:\.\d+)?)\s*(day|week|month)s?/i);
   if (!match) return null;
   const value = parseFloat(match[1]);

@@ -10,7 +10,7 @@ import type { ConversationWithPromises, Policy, PromiseCategory } from "@/types"
 interface ConversationSummary {
   id: string;
   title: string | null;
-  raw_text: string;
+  raw_text: string | null;
   created_at: string;
   promise_count: number;
   risk_count: number;
@@ -32,6 +32,9 @@ export function Dashboard({
   plan,
   conversationsUsed,
   conversationsLimit,
+  promisesThisMonth,
+  violationsThisMonth,
+  dollarsSaved,
 }: {
   initialPolicy: Policy;
   initialConversations: ConversationSummary[];
@@ -39,6 +42,9 @@ export function Dashboard({
   plan: "free" | "pro";
   conversationsUsed: number;
   conversationsLimit: number | null;
+  promisesThisMonth: number;
+  violationsThisMonth: number;
+  dollarsSaved: number | null;
 }) {
   const router = useRouter();
   const [conversationText, setConversationText] = useState("");
@@ -58,7 +64,10 @@ export function Dashboard({
     return history.filter((c) => {
       if (riskyOnly && c.risk_count === 0) return false;
       if (categoryFilter !== "all" && !c.categories.includes(categoryFilter)) return false;
-      if (search.trim() && !c.raw_text.toLowerCase().includes(search.trim().toLowerCase()))
+      if (
+        search.trim() &&
+        !(c.raw_text ?? "").toLowerCase().includes(search.trim().toLowerCase())
+      )
         return false;
       return true;
     });
@@ -139,7 +148,9 @@ export function Dashboard({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load conversation.");
       setResult(data.conversation);
-      setConversationText(data.conversation.raw_text);
+      setConversationText(
+        data.conversation.raw_text ?? "[Transcript purged after 24 hours - promises below are unaffected.]"
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load conversation.");
     } finally {
@@ -213,6 +224,28 @@ export function Dashboard({
           </button>
         </div>
       </header>
+
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-500">Promises this month</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{promisesThisMonth}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-500">Violations this month</p>
+          <p className="mt-1 text-2xl font-bold text-red-600">{violationsThisMonth}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-500">Est. $ saved this month</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-600">
+            {dollarsSaved !== null
+              ? `$${dollarsSaved.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+              : "—"}
+          </p>
+          {dollarsSaved === null && (
+            <p className="mt-1 text-xs text-slate-400">Set avg. order value in policy</p>
+          )}
+        </div>
+      </div>
 
       <div className="mb-8 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
         <span>
@@ -350,8 +383,14 @@ export function Dashboard({
                     className="flex flex-1 items-center justify-between px-4 py-3 text-left text-sm hover:bg-slate-50"
                   >
                     <span className="truncate text-slate-700">
-                      {c.raw_text.slice(0, 80)}
-                      {c.raw_text.length > 80 ? "…" : ""}
+                      {c.raw_text === null ? (
+                        <span className="italic text-slate-400">Transcript purged after 24h</span>
+                      ) : (
+                        <>
+                          {c.raw_text.slice(0, 80)}
+                          {c.raw_text.length > 80 ? "…" : ""}
+                        </>
+                      )}
                     </span>
                     <span className="ml-4 flex shrink-0 items-center gap-3 text-xs text-slate-500">
                       <span>{c.promise_count} promises</span>

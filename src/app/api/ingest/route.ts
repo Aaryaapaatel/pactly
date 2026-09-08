@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { hashApiKey } from "@/lib/apiKeys";
-import { getActivePolicy } from "@/lib/policy";
-import { extractPromises } from "@/lib/extraction";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { checkUsageAllowed } from "@/lib/subscription";
-import type { ConversationWithPromises } from "@/types";
+import { runIngestPipeline, ExtractionFailedError } from "@/lib/ingestPipeline";
 
 const RATE_LIMIT = 60;
 const RATE_LIMIT_WINDOW_MINUTES = 60;
@@ -19,6 +17,10 @@ const RATE_LIMIT_WINDOW_MINUTES = 60;
 // no cookies, no logged-in user) - it's a bearer API key, verified by
 // looking up its hash in api_keys. Every write below uses the user_id
 // resolved from that lookup, never anything from the request body.
+//
+// Kept as the original, simpler payload shape for backward compatibility;
+// POST /api/v1/ingest accepts the fuller {conversation_id, transcript_text,
+// platform, agent_flow} shape and calls the same pipeline.
 
 const ingestSchema = z.object({
   conversation_text: z
@@ -87,54 +89,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { conversation_text, title } = parsed.data;
-
-  const policy = await getActivePolicy(supabaseAdmin, userId);
-
-  let extracted;
   try {
-    extracted = await extractPromises(conversation_text, policy);
+    const conversation = await runIngestPipeline(supabaseAdmin, userId, parsed.data.conversation_text, {
+      title: parsed.data.title,
+    });
+    return NextResponse.json({ conversation });
   } catch (err) {
-    console.error("Ingest extraction failed:", err);
-    return NextResponse.json(
-      { error: "Failed to extract promises from the conversation." },
-      { status: 502 }
-    );
-  }
-
-  const { data: conversation, error: conversationError } = await supabaseAdmin
-    .from("conversations")
-    .insert({ user_id: userId, raw_text: conversation_text, title: title ?? null })
-    .select("*")
-    .single();
-
-  if (conversationError) {
-    return NextResponse.json({ error: conversationError.message }, { status: 500 });
-  }
-
-  const promiseRows = extracted.map((p) => ({
-    user_id: userId,
-    conversation_id: conversation.id,
-    category: p.category,
-    promise_text: p.promise_text,
-    extracted_value: p.extracted_value,
-    risk_flag: p.risk_flag,
-    risk_reason: p.risk_reason,
-  }));
-
-  let promises = [];
-  if (promiseRows.length > 0) {
-    const { data: insertedPromises, error: promisesError } = await supabaseAdmin
-      .from("promises")
-      .insert(promiseRows)
-      .select("*");
-
-    if (promisesError) {
-      return NextResponse.json({ error: promisesError.message }, { status: 500 });
+    if (err instanceof ExtractionFailedError) {
+      return NextResponse.json({ error: err.message }, { status: 502 });
     }
-    promises = insertedPromises;
+    console.error("Ingest failed:", err);
+    return NextResponse.json({ error: "Failed to ingest conversation." }, { status: 500 });
   }
-
-  const result: ConversationWithPromises = { ...conversation, promises };
-  return NextResponse.json({ conversation: result });
 }

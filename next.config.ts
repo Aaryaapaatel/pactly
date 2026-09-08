@@ -42,6 +42,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  // Only affects the Docker build (see Dockerfile, which sets DOCKER_BUILD=true).
+  // Left unset for the normal Vercel build - Vercel has its own optimized
+  // output handling and doesn't need or want "standalone" mode.
+  ...(process.env.DOCKER_BUILD === "true" ? { output: "standalone" as const } : {}),
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

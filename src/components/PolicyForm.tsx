@@ -13,6 +13,9 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
   const [approvedOfferings, setApprovedOfferings] = useState<ApprovedOffering[]>(
     initialPolicy.approved_offerings
   );
+  const [avgOrderValue, setAvgOrderValue] = useState<string>(
+    initialPolicy.avg_order_value?.toString() ?? ""
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +122,7 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
           approved_offerings: approvedOfferings.filter(
             (o) => o.name.trim() && o.description.trim()
           ),
+          avg_order_value: avgOrderValue.trim() ? Number(avgOrderValue) : null,
         }),
       });
       const data = await res.json();
@@ -201,6 +205,25 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
             step="0.1"
             value={deliveryWeeks}
             onChange={(e) => setDeliveryWeeks(Number(e.target.value))}
+            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          />
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <label className="block text-sm font-medium text-slate-700">
+            Average order value ($, optional)
+          </label>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Used to estimate dollars saved on the dashboard when a discount violation is caught
+            (promised % − allowed %) × this value.
+          </p>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={avgOrderValue}
+            onChange={(e) => setAvgOrderValue(e.target.value)}
+            placeholder="e.g. 500"
             className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
         </div>
