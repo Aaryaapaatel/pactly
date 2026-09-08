@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-  title: "Pactly — AI Agent Accountability",
+  title: "Pactly | AI Agent Accountability",
   description: "Audit every promise your AI sales agent makes against company policy.",
 };
 

@@ -6,9 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Pactly — Catch what your AI sales agent promises",
+  title: "Pactly: Catch what your AI sales agent promises",
   description:
-    "Pactly reads every conversation your AI sales agent has with customers, extracts every price quote, discount, timeline, and feature promise, and flags anything that breaks company policy — automatically.",
+    "Pactly reads every conversation your AI sales agent has with customers, extracts every price quote, discount, timeline, and feature promise, and flags anything that breaks company policy.",
 };
 
 const STEPS = [
@@ -18,15 +18,15 @@ const STEPS = [
   },
   {
     title: "Claude extracts every promise",
-    body: "Every price quote, discount, delivery date, and feature guarantee your agent made — pulled out automatically, nothing missed.",
+    body: "Every price quote, discount, delivery date, and feature guarantee your agent made, pulled out automatically. Nothing gets skipped.",
   },
   {
     title: "Checked against your policy",
-    body: "Max discount, delivery window, custom rules, and the products you actually offer — set once, checked every time.",
+    body: "Max discount, delivery window, custom rules, and the products you actually offer. Set it once and it's checked every time after.",
   },
   {
     title: "Risks land in your audit log",
-    body: "See exactly what was promised, what broke policy, and why — searchable, filterable, exportable.",
+    body: "See exactly what was promised, what broke policy, and why. Searchable, filterable, exportable.",
   },
 ];
 
@@ -45,7 +45,7 @@ const FEATURES = [
   },
   {
     title: "A real audit trail",
-    body: "Every conversation and every flag, kept, searchable, and exportable as CSV — not lost in a chat log.",
+    body: "Every conversation and every flag stays on record, searchable, and exportable as CSV. It doesn't just disappear into a chat log.",
   },
 ];
 
@@ -76,7 +76,7 @@ export default async function LandingPage() {
         <p className="mx-auto mt-6 max-w-xl text-base text-slate-600 sm:text-lg">
           Pactly reads every conversation your agent has with a customer, extracts every price
           quote, discount, timeline, and feature promise, and flags anything that breaks your
-          company&apos;s policy — automatically.
+          company&apos;s policy.
         </p>
         <div className="mt-8 flex justify-center">
           <Link
@@ -89,30 +89,28 @@ export default async function LandingPage() {
       </header>
 
       <section className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
-        <div className="mx-auto max-w-5xl px-6">
-          <h2 className="text-center text-2xl font-bold text-slate-900 sm:text-3xl">
-            How it works
-          </h2>
-          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto max-w-2xl px-6">
+          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">How it works</h2>
+          <ol className="mt-10 space-y-8">
             {STEPS.map((step, i) => (
-              <div key={step.title}>
-                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+              <li key={step.title} className="flex gap-4">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
                   {i + 1}
+                </span>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{step.title}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{step.body}</p>
                 </div>
-                <h3 className="mb-1 font-semibold text-slate-900">{step.title}</h3>
-                <p className="text-sm text-slate-600">{step.body}</p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
       <section className="py-16 sm:py-24">
         <div className="mx-auto max-w-5xl px-6">
-          <h2 className="text-center text-2xl font-bold text-slate-900 sm:text-3xl">
-            What you get
-          </h2>
-          <div className="mt-12 grid gap-6 sm:grid-cols-2">
+          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">What you get</h2>
+          <div className="mt-10 grid gap-6 sm:grid-cols-2">
             {FEATURES.map((feature) => (
               <div key={feature.title} className="rounded-lg border border-slate-200 p-6">
                 <h3 className="mb-2 font-semibold text-slate-900">{feature.title}</h3>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Pactly",
+  title: "Terms of Service | Pactly",
   description: "The terms for using Pactly.",
 };
 
@@ -17,17 +17,17 @@ export default function TermsPage() {
 
       <div className="space-y-6 text-sm leading-6 text-slate-700">
         <p>
-          This is a plain-language starting point, not a substitute for legal advice — have a
-          lawyer review and adapt this before relying on it for a real product.
+          This is a plain-language starting point, not a substitute for legal advice. Have a
+          lawyer review and adapt it before relying on it for a real product.
         </p>
 
         <section>
           <h2 className="mb-2 font-semibold text-slate-900">What Pactly does</h2>
           <p>
             Pactly extracts promises from conversation transcripts using an AI model and checks
-            them against policy rules you configure. It is a decision-support tool — it does not
-            guarantee that every promise is correctly identified or every flag is accurate. Review
-            flagged items before acting on them.
+            them against policy rules you configure. It is a decision-support tool. It does not
+            guarantee that every promise is correctly identified or every flag is accurate, so
+            review flagged items before acting on them.
           </p>
         </section>
 

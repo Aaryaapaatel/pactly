@@ -93,7 +93,7 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
       setExtractSummary(
         found.length > 0
           ? `Found: ${found.join(", ")}. Review below, then save.`
-          : "Didn't find any policy rules in that text — nothing was added."
+          : "Didn't find any policy rules in that text, so nothing was added."
       );
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : "Failed to extract policy.");
