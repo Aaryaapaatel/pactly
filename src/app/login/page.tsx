@@ -28,7 +28,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
       return;
     }
@@ -48,7 +48,7 @@ export default function LoginPage() {
     if (data.session) {
       // Email confirmation is off for this project - the user is signed in
       // immediately.
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
       return;
     }

@@ -141,7 +141,7 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
             These rules are checked against every promise the AI agent makes.
           </p>
         </div>
-        <Link href="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+        <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
           ← Back to dashboard
         </Link>
       </div>

@@ -58,7 +58,7 @@ export function ApiKeysManager({ initialKeys }: { initialKeys: ApiKey[] }) {
             them in by hand.
           </p>
         </div>
-        <Link href="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+        <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
           ← Back to dashboard
         </Link>
       </div>

@@ -1,7 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+// Allowlist of what actually requires a signed-in session. Everything else
+// (the landing page, legal pages, login, API routes, metadata routes like
+// sitemap.xml/robots.txt/icon/opengraph-image, and genuine 404s) passes
+// through untouched - a blocklist approach here previously redirected all
+// of those to /login by mistake, since middleware runs before Next.js knows
+// whether a path even resolves to a real page.
+const PROTECTED_PATH_PREFIXES = ["/dashboard", "/policy", "/settings"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -33,12 +39,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
-  // API routes are JSON endpoints - they must return a 401 body, never an
-  // HTML redirect. Each route handler checks auth itself.
-  const isApiPath = pathname.startsWith("/api");
+  const isProtectedPath = PROTECTED_PATH_PREFIXES.some((path) => pathname.startsWith(path));
 
-  if (!user && !isPublicPath && !isApiPath) {
+  if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -46,7 +49,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
