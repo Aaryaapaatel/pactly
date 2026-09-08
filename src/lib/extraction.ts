@@ -3,21 +3,13 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, EXTRACTION_MODEL } from "./anthropic";
 import type { Policy } from "@/types";
 
-const extractedPromiseSchema = z.object({
-  promise_text: z.string(),
-  category: z.enum(["pricing", "discount", "timeline", "feature", "other"]),
-  extracted_value: z.string().nullable(),
-  risk_flag: z.boolean(),
-  risk_reason: z.string().nullable(),
-});
-
-// Claude occasionally serializes the promises array as a JSON string instead
-// of returning it as native tool_use input - sometimes as a stringified
-// array, sometimes as a stringified copy of the whole {promises: [...]}
-// wrapper nested inside the promises field itself. Normalize all of these
-// to a plain array before validating.
-const extractionResultSchema = z.object({
-  promises: z.preprocess((value) => {
+// Claude occasionally serializes a tool_use array field as a JSON string
+// instead of returning it natively - sometimes as a stringified array,
+// sometimes as a stringified copy of the whole {<key>: [...]} wrapper
+// nested inside the field itself. This normalizes either shape to a plain
+// array before zod validates it.
+function flexibleArray<T extends z.ZodTypeAny>(itemSchema: T, wrapperKey: string) {
+  return z.preprocess((value) => {
     let normalized = value;
     if (typeof normalized === "string") {
       try {
@@ -30,12 +22,24 @@ const extractionResultSchema = z.object({
       normalized &&
       typeof normalized === "object" &&
       !Array.isArray(normalized) &&
-      "promises" in normalized
+      wrapperKey in normalized
     ) {
-      normalized = (normalized as { promises: unknown }).promises;
+      normalized = (normalized as Record<string, unknown>)[wrapperKey];
     }
     return normalized;
-  }, z.array(extractedPromiseSchema)),
+  }, z.array(itemSchema));
+}
+
+const extractedPromiseSchema = z.object({
+  promise_text: z.string(),
+  category: z.enum(["pricing", "discount", "timeline", "feature", "other"]),
+  extracted_value: z.string().nullable(),
+  risk_flag: z.boolean(),
+  risk_reason: z.string().nullable(),
+});
+
+const extractionResultSchema = z.object({
+  promises: flexibleArray(extractedPromiseSchema, "promises"),
 });
 
 export type ExtractedPromise = z.infer<typeof extractedPromiseSchema>;
@@ -198,4 +202,99 @@ function applyDeterministicPolicyCheck(
   }
 
   return promise;
+}
+
+const ruleSchema = z.object({ label: z.string(), description: z.string() });
+const offeringSchema = z.object({ name: z.string(), description: z.string() });
+
+const extractedPolicySchema = z.object({
+  max_discount_percent: z.number().nullable(),
+  standard_delivery_weeks: z.number().nullable(),
+  custom_rules: flexibleArray(ruleSchema, "custom_rules"),
+  approved_offerings: flexibleArray(offeringSchema, "approved_offerings"),
+});
+
+export type ExtractedPolicyDraft = z.infer<typeof extractedPolicySchema>;
+
+const EXTRACT_POLICY_TOOL = {
+  name: "extract_policy",
+  description:
+    "Extract structured company policy rules from a freeform policy document (e.g. an internal handbook excerpt, a pricing sheet, an SOP).",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      max_discount_percent: {
+        type: ["number", "null"],
+        description:
+          "The maximum discount percentage agents are allowed to offer, if the document states one. Null if not mentioned.",
+      },
+      standard_delivery_weeks: {
+        type: ["number", "null"],
+        description:
+          "The standard/default delivery or fulfillment timeline, converted to weeks (e.g. '10 business days' -> ~1.4), if the document states one. Null if not mentioned.",
+      },
+      custom_rules: {
+        type: "array",
+        description:
+          "Any other policy rules that aren't the max discount or delivery timeline, e.g. 'no free support beyond 30 days' or 'refunds require manager approval'. Empty array if none.",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "A short name for the rule." },
+            description: { type: "string", description: "One sentence explaining the rule." },
+          },
+          required: ["label", "description"],
+        },
+      },
+      approved_offerings: {
+        type: "array",
+        description:
+          "Products, plans, features, or guarantees the document says the company actually provides, each with what's included. Empty array if the document doesn't describe specific offerings.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The offering's name, e.g. 'Pro plan'." },
+            description: {
+              type: "string",
+              description: "What it includes, e.g. '$99/month, email + chat support, unlimited seats'.",
+            },
+          },
+          required: ["name", "description"],
+        },
+      },
+    },
+    required: [
+      "max_discount_percent",
+      "standard_delivery_weeks",
+      "custom_rules",
+      "approved_offerings",
+    ],
+  },
+};
+
+export async function extractPolicyFromText(policyText: string): Promise<ExtractedPolicyDraft> {
+  const message = await anthropic.messages.create({
+    model: EXTRACTION_MODEL,
+    max_tokens: 4096,
+    system:
+      "You read internal company policy documents (handbooks, pricing sheets, SOPs) and pull out the structured rules a sales-agent-monitoring tool needs: the maximum discount allowed, the standard delivery timeline, any other rules, and the specific products/plans/features the company actually offers. You never invent numbers or offerings that aren't stated or clearly implied in the document. You always respond by calling the extract_policy tool.",
+    tools: [EXTRACT_POLICY_TOOL],
+    tool_choice: { type: "tool", name: "extract_policy" },
+    messages: [
+      {
+        role: "user",
+        content: `Policy document:\n"""\n${policyText}\n"""\n\nExtract the structured policy rules with the extract_policy tool.`,
+      },
+    ],
+  });
+
+  const toolUse = message.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+  );
+
+  if (!toolUse) {
+    throw new Error("Claude did not return a tool_use block for extract_policy.");
+  }
+
+  return extractedPolicySchema.parse(toolUse.input);
 }

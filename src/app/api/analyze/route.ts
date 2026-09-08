@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 import { getActivePolicy } from "@/lib/policy";
 import { extractPromises } from "@/lib/extraction";
 import type { ConversationWithPromises } from "@/types";
@@ -11,6 +11,12 @@ const analyzeSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await request.json();
   const parsed = analyzeSchema.safeParse(body);
 
@@ -20,7 +26,7 @@ export async function POST(request: Request) {
 
   const { conversation_text, title } = parsed.data;
 
-  const policy = await getActivePolicy();
+  const policy = await getActivePolicy(supabase, user.id);
 
   let extracted;
   try {
@@ -35,7 +41,7 @@ export async function POST(request: Request) {
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .insert({ raw_text: conversation_text, title: title ?? null })
+    .insert({ user_id: user.id, raw_text: conversation_text, title: title ?? null })
     .select("*")
     .single();
 
@@ -44,6 +50,7 @@ export async function POST(request: Request) {
   }
 
   const promiseRows = extracted.map((p) => ({
+    user_id: user.id,
     conversation_id: conversation.id,
     category: p.category,
     promise_text: p.promise_text,

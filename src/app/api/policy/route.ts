@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 import { getActivePolicy } from "@/lib/policy";
 
 export async function GET() {
-  const policy = await getActivePolicy();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const policy = await getActivePolicy(supabase, user.id);
   return NextResponse.json({ policy });
 }
 
@@ -20,6 +26,12 @@ const updatePolicySchema = z.object({
 });
 
 export async function PUT(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await request.json();
   const parsed = updatePolicySchema.safeParse(body);
 
@@ -27,7 +39,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const current = await getActivePolicy();
+  const current = await getActivePolicy(supabase, user.id);
 
   const { data, error } = await supabase
     .from("policies")

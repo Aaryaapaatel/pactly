@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AuditLog } from "./AuditLog";
+import { createClient } from "@/lib/supabase/client";
 import type { ConversationWithPromises, Policy } from "@/types";
 
 interface ConversationSummary {
@@ -17,15 +19,25 @@ interface ConversationSummary {
 export function Dashboard({
   initialPolicy,
   initialConversations,
+  userEmail,
 }: {
   initialPolicy: Policy;
   initialConversations: ConversationSummary[];
+  userEmail: string;
 }) {
+  const router = useRouter();
   const [conversationText, setConversationText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConversationWithPromises | null>(null);
   const [history, setHistory] = useState(initialConversations);
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault();
@@ -92,12 +104,27 @@ export function Dashboard({
             AI sales agent accountability. Paste a conversation to audit every promise made.
           </p>
         </div>
-        <Link
-          href="/policy"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          Company policy
-        </Link>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-500">{userEmail}</span>
+          <Link
+            href="/policy"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Company policy
+          </Link>
+          <Link
+            href="/settings/api-keys"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            API keys
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <div className="mb-8 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -175,7 +202,7 @@ export function Dashboard({
                     {c.risk_count > 0 && (
                       <span className="font-semibold text-red-600">{c.risk_count} risks</span>
                     )}
-                    <span>{new Date(c.created_at).toLocaleDateString()}</span>
+                    <span>{new Date(c.created_at).toLocaleDateString("en-US")}</span>
                   </span>
                 </button>
               </li>

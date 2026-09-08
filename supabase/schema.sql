@@ -1,12 +1,16 @@
 -- Pactly database schema
 -- Run this in the Supabase SQL editor (or via `supabase db push`) to set up the project.
+-- If your project was set up before auth/multi-tenancy was added, do not run
+-- this file again - use supabase/migrations/002_auth_multitenancy.sql instead,
+-- which preserves existing data.
 
 create extension if not exists "pgcrypto";
 
--- Company policy singleton-ish table. We always read/write the most recently
--- created row; a default row is auto-created on first read if none exists.
+-- Company policy, one active row per user. auth.uid() from Supabase Auth is
+-- the tenant boundary - see the row level security policies below.
 create table if not exists policies (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
   max_discount_percent numeric not null default 10,
   standard_delivery_weeks numeric not null default 4,
   custom_rules jsonb not null default '[]'::jsonb,
@@ -20,14 +24,17 @@ comment on table policies is 'Company policy rules used to flag risky promises. 
 -- One row per pasted conversation.
 create table if not exists conversations (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
   title text,
   raw_text text not null,
   created_at timestamptz not null default now()
 );
 
--- One row per extracted promise/commitment.
+-- One row per extracted promise/commitment. user_id is denormalized from the
+-- parent conversation so row level security policies stay simple (no join).
 create table if not exists promises (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
   conversation_id uuid not null references conversations(id) on delete cascade,
   category text not null check (category in ('pricing', 'discount', 'timeline', 'feature', 'other')),
   promise_text text not null,
@@ -37,13 +44,50 @@ create table if not exists promises (
   created_at timestamptz not null default now()
 );
 
+-- API keys for POST /api/ingest, so a company's own backend can push
+-- conversations automatically instead of a human pasting them in. Only a
+-- SHA-256 hash of the key is stored.
+create table if not exists api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default 'API Key',
+  key_hash text not null unique,
+  key_prefix text not null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+
+comment on table api_keys is 'API keys for POST /api/ingest. Only a SHA-256 hash of the key is stored - the full key is shown once at creation and never again. key_prefix is the first few characters, kept in the clear so a user can tell keys apart in the UI.';
+
+create index if not exists policies_user_id_idx on policies (user_id);
+create index if not exists conversations_user_id_idx on conversations (user_id);
+create index if not exists promises_user_id_idx on promises (user_id);
 create index if not exists promises_conversation_id_idx on promises (conversation_id);
 create index if not exists promises_risk_flag_idx on promises (risk_flag);
+create index if not exists api_keys_user_id_idx on api_keys (user_id);
+create index if not exists api_keys_key_hash_idx on api_keys (key_hash);
 
--- Row Level Security: disabled for this MVP (single-tenant, no auth yet).
--- All reads/writes happen through server-side API routes using the service
--- role key, so RLS is not enforced. Enable and add policies before adding
--- multi-tenant auth.
-alter table policies disable row level security;
-alter table conversations disable row level security;
-alter table promises disable row level security;
+-- Row Level Security: every table is scoped to the signed-in user. Almost
+-- all queries in the app run as the authenticated user via
+-- src/lib/supabase/server.ts, relying entirely on these policies for
+-- isolation. The one exception is POST /api/ingest (src/lib/supabase/admin.ts),
+-- which authenticates by API key instead of a login session and therefore
+-- has no Supabase Auth user to run as - it uses a service-role client, but
+-- only after resolving the key to a user_id server-side, and only to write
+-- rows for that resolved user. See that file's comments for details.
+alter table policies enable row level security;
+alter table conversations enable row level security;
+alter table promises enable row level security;
+alter table api_keys enable row level security;
+
+create policy "users manage their own policy" on policies
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "users manage their own conversations" on conversations
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "users manage their own promises" on promises
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "users manage their own api keys" on api_keys
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

@@ -41,3 +41,11 @@ export interface PromiseRecord {
 export interface ConversationWithPromises extends Conversation {
   promises: PromiseRecord[];
 }
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+}

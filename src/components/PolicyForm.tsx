@@ -17,6 +17,11 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [policyDocText, setPolicyDocText] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extractSummary, setExtractSummary] = useState<string | null>(null);
+
   function updateRule(index: number, field: keyof CustomRule, value: string) {
     setCustomRules((prev) =>
       prev.map((rule, i) => (i === index ? { ...rule, [field]: value } : rule))
@@ -43,6 +48,58 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
 
   function addOffering() {
     setApprovedOfferings((prev) => [...prev, { name: "", description: "" }]);
+  }
+
+  async function handleExtract() {
+    if (!policyDocText.trim()) return;
+    setExtracting(true);
+    setExtractError(null);
+    setExtractSummary(null);
+
+    try {
+      const res = await fetch("/api/policy/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ policy_text: policyDocText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to extract policy.");
+
+      const draft = data.draft as {
+        max_discount_percent: number | null;
+        standard_delivery_weeks: number | null;
+        custom_rules: CustomRule[];
+        approved_offerings: ApprovedOffering[];
+      };
+
+      const found: string[] = [];
+      if (draft.max_discount_percent !== null) {
+        setMaxDiscount(draft.max_discount_percent);
+        found.push("max discount");
+      }
+      if (draft.standard_delivery_weeks !== null) {
+        setDeliveryWeeks(draft.standard_delivery_weeks);
+        found.push("delivery timeline");
+      }
+      if (draft.custom_rules.length > 0) {
+        setCustomRules((prev) => [...prev, ...draft.custom_rules]);
+        found.push(`${draft.custom_rules.length} custom rule(s)`);
+      }
+      if (draft.approved_offerings.length > 0) {
+        setApprovedOfferings((prev) => [...prev, ...draft.approved_offerings]);
+        found.push(`${draft.approved_offerings.length} offering(s)`);
+      }
+
+      setExtractSummary(
+        found.length > 0
+          ? `Found: ${found.join(", ")}. Review below, then save.`
+          : "Didn't find any policy rules in that text — nothing was added."
+      );
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : "Failed to extract policy.");
+    } finally {
+      setExtracting(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -87,6 +144,35 @@ export function PolicyForm({ initialPolicy }: { initialPolicy: Policy }) {
         <Link href="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">
           ← Back to dashboard
         </Link>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
+        <label className="block text-sm font-medium text-slate-700">
+          Paste a policy document
+        </label>
+        <p className="mt-0.5 text-xs text-slate-400">
+          Paste an internal handbook excerpt, pricing sheet, or SOP and Claude will pull out the
+          discount limit, delivery timeline, rules, and offerings below for you to review.
+        </p>
+        <textarea
+          value={policyDocText}
+          onChange={(e) => setPolicyDocText(e.target.value)}
+          rows={6}
+          placeholder="Paste your policy document here..."
+          className="mt-3 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+        />
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExtract}
+            disabled={extracting || !policyDocText.trim()}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {extracting ? "Extracting..." : "Extract with AI"}
+          </button>
+          {extractSummary && <span className="text-sm text-emerald-600">{extractSummary}</span>}
+          {extractError && <span className="text-sm text-red-600">{extractError}</span>}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
