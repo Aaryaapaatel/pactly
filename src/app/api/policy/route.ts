@@ -14,15 +14,20 @@ export async function GET() {
   return NextResponse.json({ policy });
 }
 
+const ruleSchema = z.object({
+  label: z.string().min(1).max(200),
+  description: z.string().min(1).max(1000),
+});
+const offeringSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().min(1).max(1000),
+});
+
 const updatePolicySchema = z.object({
   max_discount_percent: z.number().min(0).max(100),
-  standard_delivery_weeks: z.number().min(0),
-  custom_rules: z
-    .array(z.object({ label: z.string().min(1), description: z.string().min(1) }))
-    .default([]),
-  approved_offerings: z
-    .array(z.object({ name: z.string().min(1), description: z.string().min(1) }))
-    .default([]),
+  standard_delivery_weeks: z.number().min(0).max(520),
+  custom_rules: z.array(ruleSchema).max(50).default([]),
+  approved_offerings: z.array(offeringSchema).max(50).default([]),
 });
 
 export async function PUT(request: Request) {
@@ -32,7 +37,7 @@ export async function PUT(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
   const parsed = updatePolicySchema.safeParse(body);
 
   if (!parsed.success) {
@@ -45,6 +50,7 @@ export async function PUT(request: Request) {
     .from("policies")
     .update({ ...parsed.data, updated_at: new Date().toISOString() })
     .eq("id", current.id)
+    .eq("user_id", user.id)
     .select("*")
     .single();
 

@@ -13,10 +13,13 @@ export async function GET(
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Explicit ownership check, in addition to row level security - this
+  // route stays correct even if RLS were ever misconfigured.
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select("*")
     .eq("id", id)
+    .eq("user_id", user.id)
     .single();
 
   if (conversationError) {
@@ -27,6 +30,7 @@ export async function GET(
     .from("promises")
     .select("*")
     .eq("conversation_id", id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   if (promisesError) {
@@ -48,7 +52,11 @@ export async function DELETE(
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { error } = await supabase.from("conversations").delete().eq("id", id);
+  const { error } = await supabase
+    .from("conversations")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

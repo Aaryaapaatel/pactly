@@ -4,7 +4,11 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { hashApiKey } from "@/lib/apiKeys";
 import { getActivePolicy } from "@/lib/policy";
 import { extractPromises } from "@/lib/extraction";
+import { checkRateLimit } from "@/lib/rateLimit";
 import type { ConversationWithPromises } from "@/types";
+
+const RATE_LIMIT = 60;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
 
 // Public, API-key-authenticated endpoint for automatic conversation
 // ingestion - a company's own agent platform calls this the moment a
@@ -16,8 +20,11 @@ import type { ConversationWithPromises } from "@/types";
 // resolved from that lookup, never anything from the request body.
 
 const ingestSchema = z.object({
-  conversation_text: z.string().min(1, "conversation_text is required."),
-  title: z.string().optional(),
+  conversation_text: z
+    .string()
+    .min(1, "conversation_text is required.")
+    .max(50000, "conversation_text must be 50,000 characters or fewer."),
+  title: z.string().max(200).optional(),
 });
 
 export async function POST(request: Request) {
@@ -43,6 +50,19 @@ export async function POST(request: Request) {
   }
 
   const userId = keyRow.user_id as string;
+
+  const rateLimit = await checkRateLimit(
+    `apikey:${keyRow.id}`,
+    "ingest",
+    RATE_LIMIT,
+    RATE_LIMIT_WINDOW_MINUTES
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Max ${RATE_LIMIT} requests per hour for this API key.` },
+      { status: 429 }
+    );
+  }
 
   await supabaseAdmin
     .from("api_keys")

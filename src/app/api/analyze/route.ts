@@ -3,11 +3,18 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActivePolicy } from "@/lib/policy";
 import { extractPromises } from "@/lib/extraction";
+import { checkRateLimit } from "@/lib/rateLimit";
 import type { ConversationWithPromises } from "@/types";
 
+const RATE_LIMIT = 20;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
+
 const analyzeSchema = z.object({
-  conversation_text: z.string().min(1, "Conversation text is required."),
-  title: z.string().optional(),
+  conversation_text: z
+    .string()
+    .min(1, "Conversation text is required.")
+    .max(50000, "Conversation text must be 50,000 characters or fewer."),
+  title: z.string().max(200).optional(),
 });
 
 export async function POST(request: Request) {
@@ -17,7 +24,20 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  const rateLimit = await checkRateLimit(
+    `user:${user.id}`,
+    "analyze",
+    RATE_LIMIT,
+    RATE_LIMIT_WINDOW_MINUTES
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Max ${RATE_LIMIT} analyses per hour.` },
+      { status: 429 }
+    );
+  }
+
+  const body = await request.json().catch(() => null);
   const parsed = analyzeSchema.safeParse(body);
 
   if (!parsed.success) {

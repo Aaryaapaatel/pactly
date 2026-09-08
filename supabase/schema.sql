@@ -59,6 +59,21 @@ create table if not exists api_keys (
 
 comment on table api_keys is 'API keys for POST /api/ingest. Only a SHA-256 hash of the key is stored - the full key is shown once at creation and never again. key_prefix is the first few characters, kept in the clear so a user can tell keys apart in the UI.';
 
+-- Backing store for server-side rate limiting on routes that call the paid
+-- Claude API. RLS is enabled with no policies, on purpose: only the
+-- service-role client (src/lib/rateLimit.ts) should ever touch this table.
+create table if not exists rate_limit_events (
+  id bigint generated always as identity primary key,
+  identifier text not null,
+  route text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists rate_limit_events_lookup_idx
+  on rate_limit_events (identifier, route, created_at);
+
+alter table rate_limit_events enable row level security;
+
 create index if not exists policies_user_id_idx on policies (user_id);
 create index if not exists conversations_user_id_idx on conversations (user_id);
 create index if not exists promises_user_id_idx on promises (user_id);
