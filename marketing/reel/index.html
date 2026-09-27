@@ -1,0 +1,256 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Anton;src:url(fonts/anton.ttf)}
+@font-face{font-family:IT;src:url(fonts/it500.ttf);font-weight:500}
+@font-face{font-family:IT;src:url(fonts/it800.ttf);font-weight:800}
+@font-face{font-family:IT;src:url(fonts/it900.ttf);font-weight:900}
+@font-face{font-family:JB;src:url(fonts/jb500.ttf);font-weight:500}
+@font-face{font-family:JB;src:url(fonts/jb700.ttf);font-weight:700}
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#0A0A0F}
+#stage{position:absolute;inset:0;overflow:hidden}
+#cam{position:absolute;inset:0;transform-origin:50% 50%}
+#flash,#grain,#vig{position:absolute;inset:0;pointer-events:none}
+#flash{background:#fff;opacity:0}
+#grain{opacity:.07;background-size:512px 512px}
+#vig{background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.35) 100%)}
+.c{position:absolute;left:50%;top:50%;transform-origin:center;text-align:center}
+.abs{position:absolute}
+.anton{font-family:Anton;text-transform:uppercase;line-height:.92;white-space:nowrap;display:inline-block}
+.it{font-family:IT}
+.mono{font-family:JB;font-weight:700;white-space:nowrap}
+</style></head>
+<body>
+<div id="stage"><div id="cam"></div><div id="vig"></div><div id="grain"></div><div id="flash"></div></div>
+<script>
+const C={ink:'#0A0A0F',paper:'#F4F1EA',lime:'#C8FF2E',red:'#FF2E2E',violet:'#5B3DFF',cyan:'#00E5FF'};
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const P=(t,a,b)=>clamp((t-a)/(b-a));
+const eOutExpo=x=>x>=1?1:1-Math.pow(2,-10*x);
+const eInExpo=x=>x<=0?0:Math.pow(2,10*x-10);
+const eInOutCubic=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const eOutCubic=x=>1-Math.pow(1-x,3);
+const eOutBack=x=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const eInOutExpo=x=>x<=0?0:x>=1?1:x<.5?Math.pow(2,20*x-10)/2:(2-Math.pow(2,-20*x+10))/2;
+const rnd=i=>{const s=Math.sin(i*12.9898+78.233)*43758.5453;return s-Math.floor(s)};
+const nz=(t,seed)=>{const i=Math.floor(t),f=t-i,u=f*f*(3-2*f);return lerp(rnd(i+seed*101),rnd(i+1+seed*101),u)*2-1};
+
+// ---------- helpers ----------
+function T(txt,o={}){
+  const {size=200,color=C.paper,font='anton',fit=0,x=0,y=0,s=1,r=0,sk=0,op=1,stroke=0,extra='',wrap=''}=o;
+  const st=stroke?`color:transparent;-webkit-text-stroke:${stroke}px ${color};`:`color:${color};`;
+  return `<div class="c" style="transform:translate(-50%,-50%) translate(${x}px,${y}px) scale(${s}) rotate(${r}deg) skewX(${sk}deg);opacity:${op};${wrap}"><span class="${font}" ${fit?`data-fit="${fit}"`:''} style="font-size:${size}px;${st}${extra}">${txt}</span></div>`;
+}
+function echo(txt,o,n=3,k=1){
+  let h='';for(let j=n;j>=1;j--)h+=T(txt,{...o,stroke:3,s:o.s*(1+j*.13*k),op:(.4/j)*(o.op??1)});
+  return h+T(txt,o);
+}
+function glitch(txt,o,g,seed){
+  if(g<=.02)return T(txt,{...o,extra:`text-shadow:4px 0 ${C.cyan},-4px 0 ${C.lime}`});
+  const dx=g*26;let h='';
+  h+=T(txt,{...o,color:C.cyan,x:o.x+dx,op:.9});
+  h+=T(txt,{...o,color:C.lime,x:o.x-dx,op:.9});
+  const n=6;for(let i=0;i<n;i++){const a=i*100/n,b=100-(i+1)*100/n,off=(rnd(seed*13+i)-.5)*g*160;
+    h+=T(txt,{...o,x:o.x+off,extra:`clip-path:inset(${a}% 0 ${b}% 0)`});}
+  return h;
+}
+const pop=(t,t0,d=.22)=>eOutBack(P(t,t0,t0+d));
+
+// ---------- scenes ----------
+// S1 HOOK: 4 word slams in the first second
+function s1(t){
+  const W=[['YOUR',C.paper,C.ink,2.8],['AI AGENT',C.ink,C.paper,1.8],['JUST<br>PROMISED',C.violet,C.paper,1.8],['40%<br>OFF.',C.red,C.paper,2.2]];
+  const i=Math.min(3,Math.floor(t/.25)),u=t-i*.25;let [txt,bg,fg,from]=W[i];
+  const k=eOutExpo(P(u,0,.18));
+  let s=lerp(from,1,k),r=(i%2?-1:1)*lerp(9,0,k);
+  if(i===3){ s*=1+.07*P(t,.9,1.25);
+    if(t>=1.0){bg=C.paper;fg=C.red;const q=eOutExpo(P(t,1,1.1));r=lerp(-6,-3,q);s*=lerp(1.25,1,q);} }
+  return {bg,html:echo(txt,{size:300,color:fg,fit:960,s,r},3,lerp(2.6,1,k))};
+}
+// S2 CHAT: 3D card push-in, bubbles on the beat, crash zoom into "40% off"
+function s2(t){
+  const u=t-1.25,k=eInOutCubic(P(u,0,1.75)),whip=eOutExpo(P(u,0,.16));
+  const hl=eOutExpo(P(t,2.5,2.62));
+  const B=[
+    ['c','Any chance you can do better on price?',1.30],
+    ['a',`Absolutely! <span style="padding:0 6px;border-radius:10px;background:linear-gradient(${C.red},${C.red}) no-repeat;background-size:${hl*100}% 100%;${hl>.5?`color:#fff;box-shadow:0 0 ${30+20*Math.sin(t*30)}px ${C.red}`:''}">40% off</span> if you sign today 🙂`,1.75],
+    ['a','Ships tomorrow. Free onboarding too 🚀',2.25]];
+  const bub=B.map(([w,txt,t0])=>{const q=pop(t,t0);if(t<t0)return `<div style="height:0"></div>`;
+    const me=w==='c';
+    return `<div style="display:flex;justify-content:${me?'flex-end':'flex-start'};margin-top:30px;transform:translateY(${(1-q)*60}px) scale(${.7+.3*q});transform-origin:${me?'right':'left'} bottom;opacity:${clamp(q*2)}">
+      <div class="it" style="max-width:640px;font-size:48px;font-weight:500;line-height:1.25;padding:30px 38px;border-radius:44px;${me?`background:#262633;color:${C.paper};border-bottom-right-radius:12px`:`background:${C.violet};color:#fff;border-bottom-left-radius:12px`}">${txt}</div></div>`}).join('');
+  const label='02:14 AM · NO HUMAN ONLINE',n=Math.floor(label.length*P(t,1.3,1.7));
+  let h=`<div class="c mono" style="transform:translate(-50%,-50%) translateY(-700px);font-size:38px;color:${C.lime};letter-spacing:.08em">${label.slice(0,n)}${n<label.length?'▌':''}</div>`;
+  h+=`<div class="c" style="transform:translate(-50%,-50%) translateX(${(1-whip)*800}px) perspective(2200px) rotateX(${lerp(18,4,k)}deg) rotateY(${lerp(-18,8,k)}deg) scale(${lerp(.9,1.03,k)});filter:blur(${(1-whip)*20}px);width:900px;box-sizing:border-box;padding:40px 44px 56px;background:#14141C;border:2px solid #2A2A38;border-radius:56px;text-align:left;box-shadow:0 60px 120px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;gap:22px;padding-bottom:26px;border-bottom:2px solid #24242F">
+      <div style="width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,${C.violet},${C.cyan})"></div>
+      <div><div class="it" style="font-size:40px;font-weight:800;color:${C.paper}">Nova · AI Sales Agent</div>
+      <div class="it" style="font-size:30px;color:#8a8a9a"><span style="color:#3DDC84">●</span> online</div></div></div>
+    <div style="min-height:640px">${bub}</div></div>`;
+  // crash zoom into the 40% bubble
+  const z=eInExpo(P(t,2.68,3.0)),s=lerp(1,3.6,z);
+  const px=-220,py=30;
+  return {bg:`radial-gradient(1000px 1000px at ${50+20*Math.sin(t*2)}% ${40+12*Math.cos(t*1.6)}%,#3a24c966,transparent 70%),${C.ink}`,
+    html:h,cam:{s,x:-px*(s-1),y:-py*(s-1)}};
+}
+// S3 GLITCH: color strobe + RGB split typography + tickers
+function s3(t){
+  const b=Math.min(2,Math.floor((t-3)/.5)),bg=[C.red,C.ink,C.red][b];
+  const tick='MAX DISCOUNT 10% · DELIVERY ≤ 5 DAYS · APPROVED OFFERINGS ONLY · ';
+  const tc=bg===C.red?C.ink:C.red;
+  let h=`<div class="abs mono" style="left:0;top:170px;font-size:40px;color:${tc};transform:translateX(${-((t*700)%1560)}px)">${tick.repeat(6)}</div>
+         <div class="abs mono" style="left:0;top:1700px;font-size:40px;color:${tc};transform:translateX(${((t*700)%1560)-1560}px)">${tick.repeat(6)}</div>`;
+  const L=[['NOBODY',3.0,-1,900],['APPROVED',3.5,1,1000],['THAT.',4.0,0,720]];
+  L.forEach(([w,t0,dir,fit],j)=>{if(t<t0)return;const k=eOutExpo(P(t,t0,t0+.16));
+    const x=dir*(1-k)*1200,y=(j-1)*340+(dir===0?(1-k)*900:0),sk=dir*(1-k)*-30;
+    const g=Math.max(0,1-(t-t0)/.14)+P(t,4.2,4.5)*1.2;
+    h+=glitch(w,{size:330,fit,color:C.paper,x,y,sk},g,Math.floor(t*60)+j*7);});
+  const z=eInExpo(P(t,4.25,4.5));
+  return {bg,html:h,cam:{s:lerp(1,1.12,eInExpo(P(t,3,4.5)))*(1+.6*z),r:lerp(-2.5,2.5,P(t,3,4.5))}};
+}
+// S4 IRIS: lime circle wipe + MEET
+function s4(t){
+  const k=eInOutExpo(P(t,4.5,4.72)),R=k*1250;
+  let h='';
+  for(let j=0;j<3;j++){const q=eOutCubic(P(t,4.5+j*.05,4.8+j*.05));h+=`<div class="c" style="width:${q*900}px;height:${q*900}px;border-radius:50%;border:6px solid ${C.lime};opacity:${1-q};transform:translate(-50%,-50%)"></div>`;}
+  h+=`<div class="c" style="width:${2*R}px;height:${2*R}px;border-radius:50%;background:${C.lime};transform:translate(-50%,-50%)"></div>`;
+  if(t>=4.62){const q=eOutExpo(P(t,4.62,4.74));h+=T('MEET',{size:300,fit:640,color:C.ink,s:lerp(2.2,1,q)*(1+.12*P(t,4.74,5))});}
+  return {bg:C.ink,html:h,cam:{r:lerp(8,0,k)}};
+}
+// S5 DROP: PACTLY. letter cascade + shockwaves
+function s5(t){
+  const inner='PACTLY.'.split('').map((c,i)=>{const k=eOutExpo(P(t,5+i*.03,5.22+i*.03));
+    return `<span style="display:inline-block;transform:translateY(${(1-k)*115}%) rotate(${(1-k)*(i%2?14:-14)}deg)">${c}</span>`}).join('');
+  let h='';
+  for(let j=0;j<3;j++){const k=eOutCubic(P(t,5+j*.09,5.75+j*.09));h+=`<div class="c" style="width:${k*2300}px;height:${k*2300}px;border-radius:50%;border:${lerp(50,2,k)}px solid ${C.ink};opacity:${(1-k)*.9};transform:translate(-50%,-50%)"></div>`;}
+  h+=`<div class="c" style="transform:translate(-50%,-50%) translateY(-80px);overflow:hidden;padding:0 12px"><span class="anton" data-fit="1000" style="font-size:300px;line-height:1.08;color:${C.ink}">${inner}</span></div>`;
+  const q=eOutExpo(P(t,5.5,5.68)),q2=eOutBack(P(t,5.62,5.82));
+  h+=`<div class="c it" style="transform:translate(-50%,-50%) translateY(${250+(1-q)*80}px);opacity:${q};font-size:60px;font-weight:800;color:${C.ink};white-space:nowrap">Every promise your AI makes.</div>`;
+  h+=`<div class="c it" style="transform:translate(-50%,-50%) translateY(360px) scale(${q2}) rotate(-2deg);font-size:60px;font-weight:900;color:${C.lime};background:${C.ink};padding:8px 30px 12px;border-radius:14px">Checked.</div>`;
+  return {bg:C.lime,html:h,cam:{s:lerp(1.2,1,eOutExpo(P(t,5,5.9)))}};
+}
+// S6 SCAN: extraction + policy verdicts, orbiting panel
+function s6(t){
+  const k=eInOutCubic(P(t,6,8.5)),ent=eOutExpo(P(t,6,6.2));
+  const R=[['DISCOUNT','40% off',0,'✕ MAX IS 10%',6.5],['DELIVERY','Ships tomorrow',1,'✓ WITHIN 5 DAYS',7.0],['OFFERING','Free onboarding',0,'✕ NOT OFFERED',7.5]];
+  const lit=i=>t>=R[i][4]?`background:${R[i][2]?C.lime:C.red};color:${R[i][2]?C.ink:'#fff'};border-radius:8px;padding:0 6px`:'';
+  const laser=P(t,6.05,6.45);
+  let panel=`<div class="mono" style="font-size:32px;color:${C.lime};letter-spacing:.1em;margin-bottom:24px"><span style="opacity:${Math.floor(t*6)%2?1:.3}">●</span> PACTLY › EXTRACTING PROMISES</div>
+   <div style="position:relative;overflow:hidden;border-radius:40px">
+    <div class="it" style="font-size:46px;line-height:1.3;color:#fff;background:${C.violet};padding:34px 40px;border-radius:40px;border-bottom-left-radius:12px">Absolutely! <span style="${lit(0)}">40% off</span> if you sign today. <span style="${lit(1)}">Ships tomorrow</span> + <span style="${lit(2)}">free onboarding</span> 🚀</div>
+    ${laser>0&&laser<1?`<div style="position:absolute;left:0;right:0;top:${laser*100}%;height:8px;background:${C.lime};box-shadow:0 0 40px 14px ${C.lime}aa"></div><div style="position:absolute;left:0;right:0;top:0;height:${laser*100}%;background:${C.lime}22"></div>`:''}
+   </div>`;
+  R.forEach(([cat,val,ok,why,t0],i)=>{if(t<t0)return;const q=eOutBack(P(t,t0,t0+.2)),v=eOutExpo(P(t,t0+.25,t0+.37));
+    const col=ok?C.lime:C.red;
+    panel+=`<div style="margin-top:34px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:34px 36px;border-radius:32px;background:#15151E;border:3px solid ${t>=t0+.25?col:'#2A2A38'};transform:translateY(${(1-q)*-240}px) scale(${lerp(.6,1,q)});opacity:${clamp(q*2)}">
+      <div><div class="mono" style="font-size:28px;color:#8a8a9a;letter-spacing:.12em">${cat}</div><div class="it" style="font-size:60px;font-weight:800;color:${C.paper}">${val}</div></div>
+      ${t>=t0+.25?`<div class="mono" style="font-size:32px;padding:16px 22px;border-radius:14px;background:${col};color:${ok?C.ink:'#fff'};transform:scale(${lerp(1.9,1,v)}) rotate(${lerp(-10,-3,v)}deg)">${why}</div>`:''}
+    </div>`;});
+  let h=`<div class="abs" style="left:-540px;right:-540px;top:1150px;height:1400px;transform:perspective(900px) rotateX(72deg);transform-origin:top;background-image:linear-gradient(${C.lime}33 3px,transparent 3px),linear-gradient(90deg,${C.lime}33 3px,transparent 3px);background-size:140px 140px;background-position:0 ${t*420}px;mask-image:linear-gradient(transparent,#000 40%)"></div>`;
+  h+=`<div class="c" style="transform:translate(-50%,-50%) translateY(-110px) translateX(${(1-ent)*-700}px) perspective(2400px) rotateY(${lerp(14,-10,k)}deg) rotateX(${lerp(8,2,k)}deg) scale(${lerp(.94,1.02,k)});filter:blur(${(1-ent)*18}px);width:920px;text-align:left">${panel}</div>`;
+  if(t>=8){const q=eOutExpo(P(t,8,8.14));h+=T(`3 PROMISES · <span style="color:${C.red}">2 FLAGGED</span>`,{size:120,fit:900,color:C.paper,y:720,s:lerp(1.8,1,q),r:lerp(-4,-1.5,q)});}
+  return {bg:`radial-gradient(900px 700px at 50% 20%,#1d1640,transparent 70%),${C.ink}`,html:h};
+}
+// S7 TYPE RHYTHM: EVERY ___ on half-beats w/ color flips + marquee texture, then CHECKED
+function s7(t){
+  if(t<9.5){
+    const W=[['PRICE.',C.lime,C.ink],['DISCOUNT.',C.ink,C.lime],['DEADLINE.',C.violet,C.paper],['FEATURE.',C.paper,C.ink]];
+    const i=Math.min(3,Math.floor((t-8.5)/.25)),u=t-8.5-i*.25,[w,bg,fg]=W[i],k=eOutExpo(P(u,0,.14)),dir=i%2?1:-1;
+    let h='';
+    for(let r=0;r<9;r++){const d=r%2?1:-1,off=d*((t*1100+r*300)%1500)-750;
+      h+=`<div class="abs anton" style="left:0;top:${r*230-60}px;font-size:220px;color:transparent;-webkit-text-stroke:3px ${fg};opacity:.2;transform:translateX(${off}px)">${('EVERY '+w+' ').repeat(5)}</div>`;}
+    h+=T('EVERY',{size:200,fit:520,color:fg,y:-230,r:dir*-2});
+    h+=T(w,{size:300,fit:1000,color:fg,y:70+dir*(1-k)*500,sk:dir*(1-k)*25,s:lerp(1.3,1,k)});
+    return {bg,html:h,cam:{s:1+.04*(t-8.5),r:dir*.8}};
+  }
+  const k=eOutExpo(P(t,9.5,9.75)),d=P(t,9.5,9.68);
+  let h='';
+  for(let j=0;j<16;j++){const a=j*22.5+11,q=eOutExpo(P(t,9.5,9.85));
+    h+=`<div class="c" style="width:14px;height:${lerp(40,220,q)*(1-q*.6)}px;background:${j%2?C.lime:C.paper};border-radius:8px;opacity:${1-P(t,9.7,9.95)};transform:translate(-50%,-50%) translateY(-120px) rotate(${a}deg) translateY(${-(180+q*520)}px)"></div>`;}
+  h+=`<div class="c" style="transform:translate(-50%,-50%) translateY(-120px) scale(${lerp(.4,1,eOutBack(P(t,9.5,9.66)))})"><svg width="420" height="420" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${C.lime}"/><path d="M28 52 L43 66 L73 35" fill="none" stroke="${C.ink}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="70" stroke-dashoffset="${70*(1-d)}"/></svg></div>`;
+  if(t>=9.62){const q=eOutExpo(P(t,9.62,9.76));h+=T('CHECKED.',{size:300,fit:840,color:C.paper,y:330,s:lerp(1.6,1,q)});}
+  return {bg:C.ink,html:h,cam:{s:lerp(1.1,1,k)}};
+}
+// S8 REAL-TIME BLOCK
+function s8(t){
+  let h='';
+  const code='POST /api/v1/check',n=Math.floor(code.length*P(t,10,10.25));
+  h+=`<div class="c mono" style="transform:translate(-50%,-50%) translateY(-620px);font-size:46px;color:${C.ink};background:${C.lime};padding:14px 28px;border-radius:10px">${code.slice(0,n)}${n<code.length?'▌':''}</div>`;
+  const msg='I can offer you 30% off if you sign today.',m=Math.floor(msg.length*P(t,10.1,10.8)),blk=t>=11;
+  const sh=blk?Math.exp(-(t-11)*10)*22*nz(t*50,3):0,en=eOutBack(P(t,10,10.2));
+  h+=`<div class="c" style="transform:translate(-50%,-50%) translate(${sh}px,${-150+(1-en)*400}px) rotate(${blk?-1.5*eOutBack(P(t,11,11.2)):0}deg);width:880px;background:#fff;border:6px solid ${C.ink};border-radius:40px;box-shadow:20px 20px 0 ${blk?C.red:C.ink};padding:44px 48px;box-sizing:border-box;text-align:left;opacity:${clamp(en*2)}">
+    <div class="mono" style="font-size:28px;letter-spacing:.12em;color:#888;margin-bottom:22px">DRAFT REPLY · AI SALES AGENT</div>
+    <div class="it" style="font-size:68px;font-weight:800;line-height:1.1;color:${C.ink};min-height:230px">${msg.slice(0,m)}<span style="display:inline-block;width:7px;height:62px;background:${C.ink};vertical-align:-6px;margin-left:4px;opacity:${!blk&&(m<msg.length||Math.floor(t*4)%2)?1:0}"></span></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:26px"><div class="it" style="font-size:38px;font-weight:800;padding:18px 38px;border-radius:999px;background:${blk?'#cfcfcf':C.ink};color:${blk?'#888':C.paper};${blk?'text-decoration:line-through':''}">Send ↑</div></div></div>`;
+  if(blk){const q=eOutExpo(P(t,11,11.12));
+    h+=`<div class="c anton" style="transform:translate(-50%,-50%) translateY(-150px) rotate(-10deg) scale(${lerp(3.2,1,q)});opacity:${clamp(q*3)};font-size:220px;color:${C.red};border:16px solid ${C.red};padding:14px 44px 4px;border-radius:26px;background:${C.paper}dd">BLOCKED</div>`;}
+  if(t>=11.25){const r='reason: 30% > max discount 10%',c=Math.floor(r.length*P(t,11.25,11.45));
+    h+=`<div class="c mono" style="transform:translate(-50%,-50%) translateY(260px);font-size:36px;color:${C.red}">${r.slice(0,c)}</div>`;}
+  if(t>=11.5){const q=eOutBack(P(t,11.5,11.7));
+    h+=`<div class="c it" style="transform:translate(-50%,-50%) translateY(${390+(1-q)*120}px) scale(${q});font-size:50px;font-weight:800;color:${C.ink};background:${C.lime};padding:22px 40px;border-radius:999px;white-space:nowrap">→ Offer at most 10% instead</div>`;}
+  if(t>=11.5){const q=eOutExpo(P(t,11.5,11.64));h+=T('BEFORE IT SENDS.',{size:200,fit:960,color:C.ink,y:650,s:lerp(1.5,1,q),op:q});}
+  const punch=blk?.09*Math.exp(-(t-11)*6):0;
+  return {bg:`repeating-linear-gradient(0deg,#0000 0 79px,#0A0A0F0d 79px 80px),repeating-linear-gradient(90deg,#0000 0 79px,#0A0A0F0d 79px 80px),${C.paper}`,html:h,cam:{s:1+punch+.03*P(t,10,12),r:lerp(-.8,.8,P(t,10,12))}};
+}
+// S9 MONTAGE: quarter-beat feature slams, speed ramp
+function s9(t){
+  const M=[['AUDIT<br>LOG.',C.ink,C.paper],['INSTANT<br>ALERTS.',C.violet,C.paper],['PII<br>REDACTED.',C.paper,C.ink],['ALWAYS<br>ON.',C.lime,C.ink]];
+  const i=Math.min(3,Math.floor((t-12)/.25)),u=t-12-i*.25,[w,bg,fg]=M[i],k=eOutExpo(P(u,0,.12));
+  let h='';
+  if(i===0){for(let r=0;r<26;r++){const bad=rnd(r)>.7;h+=`<div class="abs mono" style="left:60px;top:${r*80-u*1600+200}px;font-size:32px;color:${bad?C.red:C.lime};opacity:.45">${bad?'✕':'✓'} conv_${4800+r*7}  ${bad?'discount 35%  FLAGGED':'delivery 3d  OK'}</div>`;}}
+  if(i===1){for(let r=0;r<5;r++){h+=`<div class="abs it" style="left:${-300+((u*3000+r*500)%1800)}px;top:${220+r*330}px;width:560px;padding:26px 30px;border-radius:26px;background:#ffffff26;color:#fff;font-size:32px;font-weight:800">⚠ Policy flag · discount 40%</div>`;}}
+  if(i===2){for(let r=0;r<10;r++){h+=`<div class="abs mono" style="left:80px;top:${140+r*175}px;font-size:40px;color:#0A0A0F33">email: <span style="background:#0A0A0F2a;color:transparent">${'x'.repeat(8+(r*5)%9)}</span> · card: <span style="background:#0A0A0F2a;color:transparent">xxxx xxxx</span></div>`;}}
+  if(i===3){for(let r=0;r<4;r++){const q=((u*4)+r/4)%1;h+=`<div class="c" style="width:${q*1800}px;height:${q*1800}px;border-radius:50%;border:8px solid ${C.ink};opacity:${(1-q)*.5};transform:translate(-50%,-50%)"></div>`;}}
+  h+=T(w,{size:300,fit:960,color:fg,s:lerp(1.6,1,k),r:(i%2?4:-4)*(1-k)+(i%2?-2:2)});
+  return {bg,html:h,cam:{s:1+.18*P(t,12,13)}};
+}
+// S10 END: shapes collide -> logo -> clean lockup
+function s10(t){
+  let h='';
+  const k=eInOutCubic(P(t,13,13.28));
+  if(t<13.3){
+    const S=[[-330,-600,C.lime,'50%'],[330,560,C.violet,'28px'],[360,-520,C.red,'tri'],[-360,520,C.ink,'ring']];
+    S.forEach(([x0,y0,c,sh],j)=>{const x=lerp(x0,0,k),y=lerp(y0,0,k),sz=320*lerp(1,.25,k),rot=lerp(j*45,j*45+300,k);
+      const style=sh==='tri'?`width:0;height:0;border-left:${sz/2}px solid transparent;border-right:${sz/2}px solid transparent;border-bottom:${sz}px solid ${c}`:
+        sh==='ring'?`width:${sz}px;height:${sz}px;border-radius:50%;border:${sz*.16}px solid ${c};box-sizing:border-box`:`width:${sz}px;height:${sz}px;border-radius:${sh};background:${c}`;
+      h+=`<div class="c" style="transform:translate(-50%,-50%) translate(${x}px,${y - 120}px) rotate(${rot}deg);${style}"></div>`;});
+  }
+  // shockwave
+  {const q=eOutCubic(P(t,13.28,13.8));if(q>0&&q<1)h+=`<div class="c" style="width:${q*1400}px;height:${q*1400}px;border-radius:50%;border:${lerp(30,2,q)}px solid ${C.lime};opacity:${1-q};transform:translate(-50%,-50%) translateY(-120px)"></div>`;}
+  const m=eOutBack(P(t,13.28,13.52)),draw=eOutCubic(P(t,13.4,13.62)),sl=eInOutCubic(P(t,13.55,13.9));
+  if(t>=13.28){
+    h+=`<div class="c" style="transform:translate(-50%,-50%) translateY(-120px);display:flex;align-items:center">
+      <div style="transform:scale(${m})"><svg width="270" height="270" viewBox="0 0 100 100"><path d="M24 6 H76 A18 18 0 0 1 94 24 V60 A18 18 0 0 1 76 78 H42 L22 95 L25 78 A18 18 0 0 1 6 60 V24 A18 18 0 0 1 24 6 Z" fill="${C.ink}"/><path d="M29 42 L44 56 L71 28" fill="none" stroke="${C.lime}" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="70" stroke-dashoffset="${70*(1-draw)}"/></svg></div>
+      <div style="max-width:${sl*760}px;overflow:hidden;margin-left:${sl*38}px"><div class="it" style="font-size:230px;font-weight:900;letter-spacing:-.045em;color:${C.ink};line-height:1;padding-bottom:18px;transform:translateX(${(1-sl)*-60}%)">Pactly</div></div></div>`;
+  }
+  const q1=eOutCubic(P(t,13.9,14.2)),q2=eOutCubic(P(t,14.15,14.45));
+  h+=`<div class="c it" style="transform:translate(-50%,-50%) translateY(${160+(1-q1)*40}px);opacity:${q1};width:860px;font-size:56px;font-weight:500;line-height:1.25;color:${C.ink}cc">Catch a bad promise before it becomes a broken one.</div>`;
+  h+=`<div class="c it" style="transform:translate(-50%,-50%) translateY(${400+(1-q2)*40}px);opacity:${q2};font-size:50px;font-weight:800;color:${C.paper};background:${C.ink};padding:30px 60px;border-radius:999px;white-space:nowrap">Start auditing, free <span style="color:${C.lime}">→</span></div>`;
+  return {bg:C.paper,html:h,still:t>13.6};
+}
+
+const SCENES=[[0,1.25,s1],[1.25,3,s2],[3,4.5,s3],[4.5,5,s4],[5,6,s5],[6,8.5,s6],[8.5,10,s7],[10,12,s8],[12,13,s9],[13,99,s10]];
+const HITS=[[0,30],[.25,20],[.5,20],[.75,30],[1,16],[3,24],[3.5,24],[4,32],[5,44],[6.5,10],[7,10],[7.5,10],[8,20],[8.5,14],[8.75,14],[9,14],[9.25,14],[9.5,30],[11,36],[12,16],[12.25,16],[12.5,16],[12.75,16],[13,18]];
+const FLASH=[0,.75,1,3,5,9.5,11,13.28];
+
+// grain texture
+(function(){const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d'),d=x.createImageData(512,512);
+  for(let i=0;i<d.data.length;i+=4){const v=Math.random()*255;d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;}
+  x.putImageData(d,0,0);document.getElementById('grain').style.backgroundImage=`url(${c.toDataURL()})`;})();
+
+const stage=document.getElementById('stage'),cam=document.getElementById('cam'),flash=document.getElementById('flash'),grain=document.getElementById('grain');
+function render(t){
+  const sc=SCENES.find(s=>t>=s[0]&&t<s[1]);const r=sc[2](t);
+  stage.style.background=r.bg;cam.innerHTML=r.html;
+  cam.querySelectorAll('[data-fit]').forEach(el=>{const w=el.offsetWidth,f=+el.dataset.fit;el.style.fontSize=(parseFloat(el.style.fontSize)*f/w)+'px';});
+  let sx=0,sy=0,sr=0;
+  if(!r.still)HITS.forEach(([h,a],j)=>{if(t<h)return;const e=a*Math.exp(-(t-h)*14);sx+=e*nz((t-h)*40,j);sy+=e*nz((t-h)*40,j+50);sr+=e*.05*nz((t-h)*30,j+90);});
+  const c=r.cam||{};
+  cam.style.transform=`translate(${(c.x||0)+sx}px,${(c.y||0)+sy}px) scale(${c.s||1}) rotate(${(c.r||0)+sr}deg)`;
+  let f=0;FLASH.forEach(h=>{if(t>=h)f=Math.max(f,.75*Math.exp(-(t-h)*22));});flash.style.opacity=f;
+  grain.style.backgroundPosition=`${Math.floor(rnd(t*60)*512)}px ${Math.floor(rnd(t*60+7)*512)}px`;
+  document.getElementById('vig').style.opacity=(r.still||sc[2]===s10||r.bg.includes(C.paper)||r.bg===C.lime)?0:1;
+}
+window.render=render;
+</script></body></html>
